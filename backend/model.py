@@ -14,8 +14,9 @@ from PIL import Image
 # ============================================================
 
 # Render Free does not provide a CUDA GPU.
-# Force CPU to avoid unnecessary CUDA initialization.
+# Force CPU and cap PyTorch threads to reduce runtime RAM footprint.
 device = torch.device("cpu")
+torch.set_num_threads(2)
 
 
 # ============================================================
@@ -280,13 +281,11 @@ def load_model(
     """
     Load RetinaX model checkpoint for inference.
 
-    Optimized for low-memory CPU deployment.
+    Optimized for low-memory CPU deployment (using bfloat16 precision and immediate GC).
     """
 
     print("[+] Building RetinaX ResNet152 model...")
 
-    # Build architecture without downloading
-    # ImageNet pretrained weights.
     model = build_model(
         pretrained=False,
         stage=2
@@ -314,23 +313,11 @@ def load_model(
 
         print("[+] Loading classifier.pt...")
 
-        # Load weights directly onto CPU.
-        #
-        # weights_only=True prevents unnecessary
-        # object loading and is safer for inference.
         state_dict = torch.load(
             abs_model_path,
             map_location="cpu",
             weights_only=True
         )
-
-        # Some checkpoints contain:
-        #
-        # {
-        #     "model_state_dict": ...
-        # }
-        #
-        # Extract it if necessary.
 
         if (
             isinstance(state_dict, dict)
@@ -341,14 +328,32 @@ def load_model(
                 "model_state_dict"
             ]
 
+        # Convert to bfloat16 if specified or on low-memory CPU
+        use_bf16 = os.getenv("USE_BFLOAT16", "true").lower() == "true"
+        if use_bf16:
+            print("[+] Converting model weights to bfloat16 precision for low-memory deployment...")
+            bf16_state = {}
+            for k, v in state_dict.items():
+                if v.is_floating_point():
+                    bf16_state[k] = v.to(dtype=torch.bfloat16)
+                else:
+                    bf16_state[k] = v
+            state_dict = bf16_state
+            model.to(dtype=torch.bfloat16)
+
         print("[+] Loading state dictionary...")
 
         model.load_state_dict(
             state_dict
         )
 
+        # Release temporary checkpoint dictionary from RAM immediately
+        del state_dict
+        import gc
+        gc.collect()
+
         print(
-            "[+] RetinaX ResNet152 loaded successfully."
+            "[+] RetinaX ResNet152 loaded successfully (RAM reclaimed)."
         )
 
     except Exception as e:
@@ -359,11 +364,10 @@ def load_model(
 
         raise
 
-    # IMPORTANT:
-    # Disable training behaviour.
+    # Disable training behaviour
     model.eval()
 
-    # Make sure gradients are disabled.
+    # Make sure gradients are disabled
     for param in model.parameters():
         param.requires_grad = False
 
@@ -410,14 +414,13 @@ def main(
         probabilities
     """
 
-    # inference_mode uses less memory than
-    # normal gradient-enabled execution.
-
     with torch.inference_mode():
 
-        # Add batch dimension.
+        # Match model precision (e.g. bfloat16 or float32)
+        model_dtype = next(model.parameters()).dtype
         image_tensor = (
             image_tensor
+            .to(dtype=model_dtype)
             .unsqueeze(0)
             .to(device)
         )
@@ -427,13 +430,12 @@ def main(
             image_tensor
         )
 
-        # Convert LogSoftmax output
-        # back into probabilities.
+        # Convert LogSoftmax output back into float32 probabilities
         probs = torch.exp(
-            output
+            output.to(dtype=torch.float32)
         )
 
-        # Find highest probability.
+        # Find highest probability
         confidence, predicted = torch.max(
             probs,
             1
