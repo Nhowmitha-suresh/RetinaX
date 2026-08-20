@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetinaX — Clinical AI Retinal Screening Platform</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <link rel="stylesheet" href="/static/assets/css/style.css?v=3.0">
+</head>
+<body>
+
+  <!-- 0. CEREMONIAL 5-SECOND ROMAN OPENING SPLASH SCREEN -->
+  <div id="retinax-intro-splash" class="intro-splash-overlay" onclick="skipIntroSplash()">
+    <div class="intro-content">
+      <div class="intro-logo-wrapper">
+        <svg class="intro-logo-svg" width="95" height="95" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="splashBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#033B37"/>
+              <stop offset="100%" stop-color="#064F49"/>
+            </linearGradient>
+            <linearGradient id="splashIrisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#18C7BE"/>
+              <stop offset="100%" stop-color="#10B8AE"/>
+            </linearGradient>
+          </defs>
+          <rect class="splash-rect" width="100" height="100" rx="24" fill="url(#splashBgGrad)"/>
+          <circle class="splash-ring-outer" cx="50" cy="50" r="36" fill="none" stroke="#18C7BE" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.6"/>
+          <circle class="splash-ring-iris" cx="50" cy="50" r="28" fill="none" stroke="url(#splashIrisGrad)" stroke-width="3"/>
+          <ellipse class="splash-ellipse" cx="50" cy="50" rx="16" ry="10" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+          <circle class="splash-pupil" cx="50" cy="50" r="6.5" fill="url(#splashIrisGrad)"/>
+          <line class="splash-cross-h" x1="10" y1="50" x2="90" y2="50" stroke="#18C7BE" stroke-width="1" opacity="0.4"/>
+          <line class="splash-cross-v" x1="50" y1="10" x2="50" y2="90" stroke="#18C7BE" stroke-width="1" opacity="0.4"/>
+        </svg>
+      </div>
+
+      <div class="intro-wordmark">
+        Retina<span class="logo-x">X</span>
+      </div>
+
+      <blockquote class="roman-splash-quote">
+        &ldquo;In every retina lies a window to systemic health &mdash; vision preserved is life transformed.&rdquo;
+      </blockquote>
+
+      <div class="splash-timer-bar-container">
+        <div class="splash-timer-progress" id="splashTimerProgress"></div>
+      </div>
+
+      <div class="intro-status" id="introStatusText">
+        INITIALIZING CLINICAL AI SUITE...
+      </div>
+    </div>
+
+    <div class="intro-skip-hint">
+      <span>CLICK ANYWHERE OR PRESS ANY KEY TO SKIP</span>
+    </div>
+  </div>
+
+  <!-- 1. DARK TEAL GLASS NAVIGATION BAR -->
+  <header class="header glass-navbar">
+    <div class="nav-container">
+      <a href="#home" class="logo">
+        <svg width="34" height="34" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="navBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#033B37"/>
+              <stop offset="100%" stop-color="#064F49"/>
+            </linearGradient>
+            <linearGradient id="navIrisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#18C7BE"/>
+              <stop offset="100%" stop-color="#10B8AE"/>
+            </linearGradient>
+          </defs>
+          <rect width="100" height="100" rx="24" fill="url(#navBgGrad)"/>
+          <circle cx="50" cy="50" r="34" fill="none" stroke="#18C7BE" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.6"/>
+          <circle cx="50" cy="50" r="26" fill="none" stroke="url(#navIrisGrad)" stroke-width="3"/>
+          <ellipse cx="50" cy="50" rx="15" ry="9" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+          <circle cx="50" cy="50" r="6.5" fill="url(#navIrisGrad)"/>
+        </svg>
+        <span>Retina<span class="logo-x">X</span></span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#home" class="nav-link active">Home</a></li>
+        <li><a href="#about" class="nav-link">About</a></li>
+        <li><a href="#how-it-works" class="nav-link">How It Works</a></li>
+        <li><a href="#detection" class="nav-link">Detection</a></li>
+        <li><a href="#stages" class="nav-link">DR Stages</a></li>
+        <li><a href="#doctors" class="nav-link">Find Doctors</a></li>
+        <li><a href="javascript:void(0)" class="nav-link" onclick="openHistoryModal()">History</a></li>
+        <li><a href="javascript:void(0)" class="nav-link" onclick="openDashboardModal()">Dashboard</a></li>
+        <li><a href="#contact" class="nav-link">Contact</a></li>
+        <div class="nav-underline-slider" id="navUnderlineSlider"></div>
+      </ul>
+
+      <div class="nav-actions-group" style="display:flex; align-items:center; gap:0.75rem; position:relative;">
+        <!-- Role Mode Pill -->
+        <button class="btn-secondary btn-sm" id="btnRoleModeToggle" onclick="toggleRoleMode()" style="padding:0.35rem 0.75rem; font-size:0.78rem; font-weight:700; border-radius:9999px;" title="Switch Mode: Doctor (Ophthalmologist) vs. Assistant (Technician)">
+          CLINICIAN MODE
+        </button>
+
+        <!-- Settings Menu Dropdown Trigger -->
+        <div class="settings-dropdown-wrapper" style="position:relative;">
+          <button class="btn-icon-nav" id="btnSettingsToggle" onclick="toggleSettingsMenu(event)" title="Settings & Options">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+
+          <!-- Dropdown Menu -->
+          <div class="settings-dropdown-menu" id="settingsDropdownMenu">
+            <div class="dropdown-header">
+              <div class="user-display-name" id="dropdownUserName">Dr. Sarah Jenkins</div>
+              <div class="user-display-role" id="dropdownUserRole">Ophthalmologist Mode</div>
+            </div>
+            <div class="dropdown-divider"></div>
+            <a href="javascript:void(0)" class="dropdown-item" onclick="openAuthModal()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+              Login / Register Account
+            </a>
+            <a href="javascript:void(0)" class="dropdown-item" onclick="toggleAccessibilityMode()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/></svg>
+              High-Contrast Mode
+            </a>
+            <a href="javascript:void(0)" class="dropdown-item" onclick="openEmergencyModal()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Emergency Eye Care Helpline
+            </a>
+            <a href="javascript:void(0)" class="dropdown-item" onclick="openHelpModal()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Operational User Guide
+            </a>
+            <div class="dropdown-divider"></div>
+            <a href="javascript:void(0)" class="dropdown-item text-danger" onclick="logoutUser()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Logout Session
+            </a>
+          </div>
+        </div>
+
+        <button class="btn-pill" onclick="scrollToSection('detection')">Start Detection</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- 2. HOME HERO SECTION (DARK TEAL-GREEN IDENTITY WITH ECG WAVEFORM) -->
+    <section id="home" class="hero">
+      <!-- LIVE ANIMATED ECG BACKGROUND MOTIF -->
+      <div class="hero-ecg-bg-wrapper">
+        <svg class="hero-ecg-svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+          <path class="hero-ecg-path" d="M0 60 L200 60 L215 50 L225 70 L235 60 L260 60 L270 20 L285 105 L300 40 L315 65 L330 60 L370 60 L385 52 L395 68 L405 60 L600 60 L615 50 L625 70 L635 60 L660 60 L670 20 L685 105 L700 40 L715 65 L730 60 L770 60 L785 52 L795 68 L805 60 L1000 60 L1015 50 L1025 70 L1035 60 L1060 60 L1070 20 L1085 105 L1100 40 L1115 65 L1130 60 L1200 60" fill="none" stroke="#18C7BE" stroke-width="2.5" opacity="0.25"/>
+        </svg>
+      </div>
+
+      <div class="hero-container">
+        <div class="hero-content">
+          <div class="hero-eyebrow">WELCOME TO TEAM THIRAN</div>
+          <h1 class="hero-title">Diabetic <span class="hero-title-accent">Retinopathy<svg class="hero-accent-svg" viewBox="0 0 240 12" fill="none"><path class="hero-accent-path" d="M3 9C60 3 180 3 237 9" stroke="#18C7BE" stroke-width="4" stroke-linecap="round"/></svg></span> Detection.</h1>
+          <p class="hero-subtitle">AI-powered retinal image analysis using ResNet152 trained for five-class diabetic retinopathy screening.</p>
+          
+          <div class="hero-btn-group">
+            <button class="btn-primary" onclick="scrollToSection('detection')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              </svg>
+              ANALYZE RETINA
+            </button>
+            <button class="btn-secondary" onclick="scrollToSection('how-it-works')">
+              HOW IT WORKS
+            </button>
+          </div>
+
+          <div class="trust-indicators">
+            <div class="trust-pill trust-pill-gold">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24B" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              VERIFIED RESNET152 AI MODEL
+            </div>
+            <div class="trust-pill">APTOS 2019 DATASET</div>
+            <div class="trust-pill">5-CLASS CLASSIFICATION</div>
+            <div class="trust-pill">GRAD-CAM EXPLAINABILITY</div>
+            <div class="trust-pill">CLINICAL PDF REPORTING</div>
+          </div>
+        </div>
+
+        <div class="hero-image-wrapper">
+          <div class="hero-glass-frame">
+            <img src="/static/assets/images/hero-banner.png" alt="Retinal Fundus AI Visual" class="hero-retinal-img">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. ABOUT SECTION (LIGHT HEADER + INTERACTIVE TIMELINE & DARK EDITORIAL) -->
+    <section id="about" class="section section-light">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-eyebrow">Mission & Technology</div>
+          <h2 class="section-title">AI-Assisted Retinal Screening</h2>
+          <p class="section-subtitle">RetinaX combines deep residual neural networks (ResNet152) trained on APTOS 2019 expert-annotated fundus photographs with automated quality screening, fundus suitability validation, and gradient-weighted class activation mapping (Grad-CAM).</p>
+        </div>
+
+        <!-- Interactive AI Engine Horizontal Timeline -->
+        <div class="glass-card interactive-pipeline-panel" style="margin-bottom: 3.5rem;">
+          <div class="pipeline-header">
+            <h3>RETINAX AI ENGINE WORKFLOW</h3>
+            <div class="engine-badge" id="aiEngineStatusBadge">AI ENGINE: CHECKING...</div>
+          </div>
+
+          <div class="pipeline-track" id="aboutPipelineTrack">
+            <div class="pipeline-node active" onclick="selectAboutNode(0, 'IMAGE CAPTURE', 'High-resolution retinal fundus photographs captured via desktop upload, camera, or smartphone camera pairing.')">
+              <div class="node-dot"></div>
+              <span>IMAGE</span>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-node" onclick="selectAboutNode(1, 'IMAGE QUALITY', 'Automated check analyzing image brightness, contrast, blur index, and resolution metrics.')">
+              <div class="node-dot"></div>
+              <span>QUALITY</span>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-node" onclick="selectAboutNode(2, 'FUNDUS VALIDATION', 'Structural check ensuring input photograph represents valid retinal fundus anatomy before running neural model.')">
+              <div class="node-dot"></div>
+              <span>FUNDUS VALIDATION</span>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-node" onclick="selectAboutNode(3, 'RESNET152 CLASSIFICATION', 'PyTorch deep residual network evaluating 5 clinical DR severity stages (Level 0 No DR to Level 4 Proliferative DR).')">
+              <div class="node-dot"></div>
+              <span>RESNET152</span>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-node" onclick="selectAboutNode(4, 'GRAD-CAM EXPLAINABILITY', 'Gradient-weighted class activation maps generating interpretable spatial heatmaps of model feature focus.')">
+              <div class="node-dot"></div>
+              <span>GRAD-CAM</span>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-node" onclick="selectAboutNode(5, 'CLINICAL REPORT', 'PDF report compilation featuring patient details, diagnostic breakdown, Grad-CAM heatmap, and referral maps.')">
+              <div class="node-dot"></div>
+              <span>REPORT</span>
+            </div>
+          </div>
+
+          <!-- Glass Info Panel for Node Details -->
+          <div class="glass-panel" id="aboutNodeDetailPanel" style="margin-top: 1.25rem; padding: 1.25rem; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle);">
+            <h4 id="aboutNodeTitle" style="color: var(--text-primary); margin-bottom: 0.25rem;">IMAGE CAPTURE</h4>
+            <p id="aboutNodeDesc" style="color: var(--text-secondary); font-size: 0.9rem;">High-resolution retinal fundus photographs captured via desktop upload, camera, or smartphone camera pairing.</p>
+          </div>
+
+          <!-- TRUST & CLINICAL COMPLIANCE STATEMENT -->
+          <div class="glass-panel trust-compliance-card" style="margin-top: 1.5rem; padding: 1.5rem; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold-accent)" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <h4 style="color: var(--text-primary); margin: 0; font-size: 0.98rem; font-weight: 700; letter-spacing: 0.04em;">CLINICAL TRUST & DATA PRIVACY</h4>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.65; margin: 0;">
+              RetinaX is engineered strictly as a clinical decision support screening aid to assist certified eye care practitioners. Image processing is executed locally on-device without unauthorized cloud data persistence, protecting patient privacy and aligning with HIPAA & GDPR data handling frameworks.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Editorial Dark Teal Section -->
+    <section class="section section-dark">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-eyebrow">CLINICAL EXPLAINABILITY</div>
+          <h2 class="section-title">BUILT FOR EXPLAINABLE SCREENING</h2>
+          <p class="section-subtitle">RetinaX provides transparent, interpretable deep learning workflows to assist eye care practitioners in clinical decision-making.</p>
+        </div>
+
+        <div class="editorial-grid">
+          <div class="editorial-col">
+            <span class="editorial-number">01</span>
+            <div class="card-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+            </div>
+            <h3>VALIDATE</h3>
+            <p>Automated fundus validation filters out non-retinal photographs and poor-quality images before model execution, eliminating false predictions.</p>
+          </div>
+
+          <div class="editorial-col">
+            <span class="editorial-number">02</span>
+            <div class="card-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </div>
+            <h3>ANALYZE</h3>
+            <p>Fine-tuned PyTorch ResNet152 classifies five severity levels from Level 0 (No DR) to Level 4 (Proliferative DR) with complete probability distribution.</p>
+          </div>
+
+          <div class="editorial-col">
+            <span class="editorial-number">03</span>
+            <div class="card-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <h3>EXPLAIN</h3>
+            <p>Gradient-weighted class activation mapping (Grad-CAM) highlights exact retinal regions (microaneurysms, exudates, hemorrhages) guiding the diagnosis.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. HOW IT WORKS SECTION (DARK TEAL BRAND) -->
+    <section id="how-it-works" class="section section-dark">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-eyebrow">End-to-End Workflow</div>
+          <h2 class="section-title">FROM RETINAL IMAGE TO AI INSIGHT</h2>
+          <p class="section-subtitle">RetinaX integrates image quality screening, fundus validation, deep learning classification, explainable Grad-CAM visual maps, and structured PDF report generation.</p>
+        </div>
+
+        <!-- HORIZONTAL WORKFLOW STEPS -->
+        <div class="horizontal-workflow">
+          <div class="workflow-step active" onclick="activateWorkflowStep(0)">
+            <span class="step-number">01</span>
+            <div class="step-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
+            <h4>CAPTURE</h4>
+            <p>Upload file, use webcam, or connect phone.</p>
+          </div>
+
+          <div class="workflow-connector"></div>
+
+          <div class="workflow-step" onclick="activateWorkflowStep(1)">
+            <span class="step-number">02</span>
+            <div class="step-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+            </div>
+            <h4>VALIDATE</h4>
+            <p>Check image quality & fundus suitability.</p>
+          </div>
+
+          <div class="workflow-connector"></div>
+
+          <div class="workflow-step" onclick="activateWorkflowStep(2)">
+            <span class="step-number">03</span>
+            <div class="step-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <h4>ANALYZE</h4>
+            <p>ResNet152 evaluates 5 DR severity levels.</p>
+          </div>
+
+          <div class="workflow-connector"></div>
+
+          <div class="workflow-step" onclick="activateWorkflowStep(3)">
+            <span class="step-number">04</span>
+            <div class="step-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </div>
+            <h4>EXPLAIN</h4>
+            <p>Grad-CAM highlights model focus regions.</p>
+          </div>
+
+          <div class="workflow-connector"></div>
+
+          <div class="workflow-step" onclick="activateWorkflowStep(4)">
+            <span class="step-number">05</span>
+            <div class="step-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <h4>REPORT</h4>
+            <p>Generate & download clinical PDF report.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. DETECTION WORKSPACE SECTION (LIGHT CLINICAL BACKGROUND) -->
+    <section id="detection" class="section section-light">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-eyebrow">AI RETINAL SCREENING</div>
+          <h2 class="section-title">Upload or Capture Retinal Image</h2>
+          <p class="section-subtitle">Select a verified fundus image file, capture via webcam, or connect your smartphone camera using a dynamic QR code.</p>
+        </div>
+
+        <div class="glass-card detection-workspace-card">
+          
+          <!-- Sample Scans Bar -->
+          <div class="sample-selector-bar">
+            <span>APTOS 2019 Sample Scans:</span>
+            <div class="sample-btn-group">
+              <button class="btn-sample" onclick="loadSampleImage('eye1.png', 'Level 0 - No DR')">Sample 1 (No DR)</button>
+              <button class="btn-sample" onclick="loadSampleImage('eye2.png', 'Level 1 - Mild')">Sample 2 (Mild)</button>
+              <button class="btn-sample" onclick="loadSampleImage('eye3.png', 'Level 3 - Severe')">Sample 3 (Severe)</button>
+              <button class="btn-sample" onclick="loadSampleImage('eye4.png', 'Level 3 - Severe')">Sample 4 (Severe)</button>
+              <button class="btn-sample" onclick="loadSampleImage('eye5.png', 'Level 4 - Proliferative')">Sample 5 (Proliferative)</button>
+            </div>
+          </div>
+
+          <!-- INPUT METHOD CARDS -->
+          <div class="input-methods-grid">
+            <!-- Card 1: Browse File -->
+            <div class="input-option-card" onclick="document.getElementById('fileInput').click()">
+              <div class="option-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <h4>BROWSE FILE</h4>
+              <p>Drag & drop or select local fundus photograph</p>
+              <button class="btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">BROWSE FILE</button>
+            </div>
+
+            <!-- Card 2: Capture Image (Webcam) -->
+            <div class="input-option-card" onclick="openWebcamModal()">
+              <div class="option-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </div>
+              <h4>CAPTURE IMAGE</h4>
+              <p>Use connected laptop camera or USB webcam</p>
+              <button class="btn-secondary btn-sm" onclick="event.stopPropagation(); openWebcamModal()">OPEN WEBCAM</button>
+            </div>
+
+            <!-- Card 3: Connect Phone Camera -->
+            <div class="input-option-card" onclick="openMobileCameraModal()">
+              <div class="option-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                  <line x1="12" y1="18" x2="12.01" y2="18"/>
+                </svg>
+              </div>
+              <h4>CONNECT PHONE</h4>
+              <p>Scan real-time QR code to pair smartphone</p>
+              <button class="btn-primary btn-sm" onclick="event.stopPropagation(); openMobileCameraModal()">CONNECT PHONE</button>
+            </div>
+          </div>
+          <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+
+          <!-- WORKSPACE VIEWER -->
+          <div class="workspace-viewer-container" id="workspaceViewer" style="display: none;">
+            <div class="viewer-header">
+              <div class="source-tag" id="imageSourceTag">SOURCE: FILE UPLOAD</div>
+              <div class="viewer-actions">
+                <button class="btn-secondary btn-sm" onclick="resetWorkspace()">RESET VIEW</button>
+              </div>
+            </div>
+
+            <div class="image-preview-frame" id="previewBoxFrame">
+              <img id="imagePreview" src="" alt="Retinal Fundus Image">
+              <div class="fundus-scanner-beam" id="fundusScannerBeam" style="display: none;"></div>
+            </div>
+
+            <!-- STEP 1: FUNDUS VALIDATION BUTTON -->
+            <div class="validation-action-bar" id="validationActionBar">
+              <button class="btn-primary" id="validateImageBtn" onclick="runFundusValidationPipeline()">
+                FIRST, VERIFY THE IMAGE
+              </button>
+            </div>
+
+            <!-- INVALID FUNDUS PANEL -->
+            <div class="glass-panel error-validation-panel" id="invalidFundusPanel" style="display: none;">
+              <div class="error-panel-header">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <h3>IMAGE NOT SUITABLE</h3>
+              </div>
+              <p id="invalidReasonText" style="margin-bottom: 1.25rem;">This image does not appear to be a retinal fundus photograph. Please capture or upload a valid retinal fundus image.</p>
+              <button class="btn-retake" onclick="resetWorkspace()">CAPTURE AGAIN</button>
+            </div>
+
+            <!-- VALID FUNDUS PANEL -->
+            <div class="glass-panel success-validation-panel" id="validFundusPanel" style="display: none;">
+              <div class="success-panel-header">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <h3>FUNDUS IMAGE VERIFIED</h3>
+              </div>
+              <div class="validation-metrics-grid">
+                <div><span>Quality Score:</span> <strong id="valScoreText">88.5%</strong></div>
+                <div><span>Fundus Check:</span> <strong id="valFundusStatus">Passed</strong></div>
+                <div><span>Resolution:</span> <strong id="valResText">1024x1024px</strong></div>
+                <div><span>Blur Status:</span> <strong id="valBlurText">Low</strong></div>
+              </div>
+              <button class="btn-primary" id="runResNetBtn" onclick="executeResNetAnalysis()">
+                ANALYZE WITH RESNET152
+              </button>
+            </div>
+          </div>
+
+          <!-- DIAGNOSTIC RESULTS DASHBOARD (DARK TEAL RETINAX BRAND) -->
+          <div class="results-dashboard" id="resultsDashboard" style="display: none;">
+            <div class="results-dashboard-header">
+              <h2>RETINAL ANALYSIS</h2>
+              <div class="prediction-badge" id="resultBadge">No DR</div>
+            </div>
+
+            <!-- Five-Class Probability Distribution -->
+            <div class="prob-distribution-card">
+              <h4>Five-Class Probability Distribution</h4>
+              <div class="prob-bars-list" id="probBarsList"></div>
+            </div>
+
+            <!-- Grad-CAM Visualizer -->
+            <div class="gradcam-section-card">
+              <div class="gradcam-header">
+                <div>
+                  <h3>SEE WHAT THE MODEL SEES</h3>
+                  <p>Grad-CAM provides an interpretable visualization of image regions that contributed to the model prediction.</p>
+                </div>
+                <div class="gradcam-tabs">
+                  <button class="tab-btn active" id="tabOriginal" onclick="switchGradCamTab('original')">ORIGINAL</button>
+                  <button class="tab-btn" id="tabHeatmap" onclick="switchGradCamTab('heatmap')">HEATMAP</button>
+                  <button class="tab-btn" id="tabOverlay" onclick="switchGradCamTab('overlay')">OVERLAY</button>
+                </div>
+              </div>
+
+              <div class="gradcam-image-display">
+                <img id="gradcamDisplayImg" src="" alt="Grad-CAM Visualization">
+              </div>
+              <div class="disclaimer-text" style="margin-top: 0.75rem;">
+                Note: Grad-CAM is an interpretability aid highlighting feature focus regions (microaneurysms, exudates, hemorrhages).
+              </div>
+            </div>
+
+            <!-- EXPLAINABILITY BLOCK: HOW THIS RESULT WAS DETERMINED -->
+            <div class="glass-panel explainability-card" id="explainabilityCard" style="margin-top: 1.5rem; padding: 1.5rem;">
+              <h4 style="margin-bottom: 0.5rem; color: var(--text-primary); font-size: 1.05rem; font-weight: 700;">HOW THIS RESULT WAS DETERMINED</h4>
+              <p style="font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 1rem;">
+                RetinaX evaluates each retinal image across five clinically defined Diabetic Retinopathy severity levels (Level 0–4) based on deep residual feature patterns learned from expert-annotated APTOS 2019 data. The reported confidence reflects model class probability relative to all alternative categories.
+              </p>
+              <div id="inlineSeverityCharacteristics" style="padding: 1rem; background: rgba(24, 199, 190, 0.08); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;" id="explainLevelTitle">PREDICTED LEVEL BREAKDOWN</div>
+                <div style="font-size: 0.88rem; color: var(--text-secondary);" id="explainLevelChars">Clinical characteristics loading...</div>
+              </div>
+            </div>
+
+            <!-- SEVERITY-AWARE INLINE NEARBY HOSPITAL RECOMMENDATION CARD -->
+            <div class="glass-panel hospital-recommendation-card" id="hospitalRecommendationCard" style="margin-top: 1.5rem; padding: 1.5rem; display: none;">
+              <div class="card-header" style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D99A20" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                <h4 id="urgencyHeaderTitle" style="color: var(--text-primary); margin: 0; font-size: 1.05rem; font-weight: 700;">RECOMMENDED SPECIALIST REFERRAL</h4>
+              </div>
+              <p id="urgencyMessageText" style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.25rem; font-weight: 600;">
+                A follow-up consultation with an eye care specialist is recommended.
+              </p>
+
+              <div id="inlineDoctorsList" class="inline-doctors-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                <!-- Populated dynamically with 1-3 real nearby specialists -->
+              </div>
+
+              <div style="text-align: right;">
+                <button class="btn-secondary btn-sm" onclick="scrollToSection('doctors')">VIEW ALL NEARBY SPECIALISTS &rarr;</button>
+              </div>
+            </div>
+
+            <!-- PDF Clinical Report Preview & Download -->
+            <div class="glass-panel report-preview-panel" style="margin-top: 1.5rem;">
+              <div class="report-panel-content">
+                <div>
+                  <h3>CLINICAL SCREENING REPORT</h3>
+                  <p>Generated PDF includes session details, image quality check, DR classification, Grad-CAM heatmap, follow-up care recommendations, and physician referral notes.</p>
+                </div>
+                <div class="report-btn-group">
+                  <button class="btn-secondary" onclick="viewGeneratedReport()">VIEW REPORT</button>
+                  <button class="btn-primary" onclick="downloadGeneratedReport()">DOWNLOAD REPORT</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. DR STAGES REFERENCE SECTION -->
+    <section id="stages" class="section section-dark">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-eyebrow">Clinical Classification Reference <span class="gold-eyebrow-line"></span></div>
+          <h2 class="section-title">DR SEVERITY REFERENCE SCALE</h2>
+          <p class="section-subtitle">Overview of the five clinical stages according to the International Clinical Diabetic Retinopathy Disease Severity Scale.</p>
+          <div style="margin-top: 1.25rem;">
+            <button class="btn-secondary btn-sm" onclick="downloadStagesReferencePdf()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              DOWNLOAD CLINICAL REFERENCE GUIDE (PDF)
+            </button>
+          </div>
+        </div>
+
+        <div class="glass-card stages-table-card">
+          <table class="stages-table">
+            <thead>
+              <tr>
+                <th>Level</th>
+                <th>Stage Name</th>
+                <th>Clinical Characteristics</th>
+                <th>Recommended Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="stage-badge level-0">Level 0</span></td>
+                <td><strong>NO DR</strong></td>
+                <td>No visible microaneurysms or retinal lesions.</td>
+                <td>Annual routine screening</td>
+              </tr>
+              <tr>
+                <td><span class="stage-badge level-1">Level 1</span></td>
+                <td><strong>MILD NPDR</strong></td>
+                <td>Microaneurysms only.</td>
+                <td>Follow-up in 6 to 12 months</td>
+              </tr>
+              <tr>
+                <td><span class="stage-badge level-2">Level 2</span></td>
+                <td><strong>MODERATE NPDR</strong></td>
+                <td>More than microaneurysms but less than severe NPDR. Hard exudates or cotton wool spots.</td>
+                <td>Referral to ophthalmologist within 3 months</td>
+              </tr>
+              <tr>
+                <td><span class="stage-badge level-3">Level 3</span></td>
+                <td><strong>SEVERE NPDR</strong></td>
+                <td>Intraretinal hemorrhages in 4 quadrants, venous beading in 2+ quadrants, or IRMA in 1+ quadrant.</td>
+                <td>Prompt ophthalmologist consultation within 4 weeks</td>
+              </tr>
+              <tr>
+                <td><span class="stage-badge level-4">Level 4</span></td>
+                <td><strong>PROLIFERATIVE DR</strong></td>
+                <td>Neovascularization or vitreous/preretinal hemorrhage. High risk of vision loss.</td>
+                <td>Urgent retina specialist evaluation</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. FIND DOCTORS SECTION (REAL GOOGLE PLACES DATA) -->
+    <section id="doctors" class="section section-light">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-eyebrow">Clinical Referral Network <span class="gold-eyebrow-line"></span></div>
+          <h2 class="section-title">FIND AN EYE SPECIALIST</h2>
+          <p class="section-subtitle">Locate verified ophthalmology providers, eye hospitals, and retinal specialists near your location.</p>
+        </div>
+
+        <div class="glass-panel doctor-search-panel">
+          <div class="search-controls-row">
+            <div class="search-field">
+              <label>LOCATION</label>
+              <input type="text" id="doctorLocationInput" class="glass-control" placeholder="Enter City, PIN code, or region (e.g. Coimbatore, Chennai, Nilgiris)">
+            </div>
+            
+            <div class="search-field">
+              <label>SPECIALTY</label>
+              <select id="doctorSpecialtySelect" class="glass-control">
+                <option value="ophthalmologist">Ophthalmology & Retina</option>
+                <option value="eye_hospital">Eye Hospital & Clinic</option>
+              </select>
+            </div>
+
+            <div class="search-field">
+              <label>RADIUS</label>
+              <select id="doctorRadiusSelect" class="glass-control">
+                <option value="15">15 km</option>
+                <option value="30" selected>30 km</option>
+                <option value="50">50 km</option>
+              </select>
+            </div>
+
+            <div class="search-actions">
+              <button class="btn-primary" onclick="triggerDoctorSearch()">SEARCH</button>
+              <button class="btn-secondary" onclick="detectUserLocation()">DETECT MY LOCATION</button>
+            </div>
+          </div>
+
+          <div class="predefined-cities">
+            <span>Quick Select City:</span>
+            <button class="btn-city-tag" onclick="selectPredefinedCity('Coimbatore')">Coimbatore</button>
+            <button class="btn-city-tag" onclick="selectPredefinedCity('Chennai')">Chennai</button>
+            <button class="btn-city-tag" onclick="selectPredefinedCity('The Nilgiris')">The Nilgiris</button>
+            <button class="btn-city-tag" onclick="selectPredefinedCity('Ooty')">Ooty</button>
+          </div>
+
+          <div class="predefined-cities" style="margin-top: 0.75rem; padding-top: 0.75rem;">
+            <span>Facility Category:</span>
+            <button class="btn-city-tag active" id="btnFilterAll" onclick="filterFacilityCategory('all')">ALL FACILITIES</button>
+            <button class="btn-city-tag" id="btnFilterPhc" onclick="filterFacilityCategory('phc')">PRIMARY HEALTH CENTRES (PHC)</button>
+            <button class="btn-city-tag" id="btnFilterGovt" onclick="filterFacilityCategory('govt_hospital')">GOVERNMENT HOSPITALS</button>
+            <button class="btn-city-tag" id="btnFilterEye" onclick="filterFacilityCategory('eye_clinic')">EYE SPECIALTY CLINICS</button>
+          </div>
+        </div>
+
+        <div class="doctor-results-layout">
+          <div class="doctor-cards-column" id="doctorCardsList">
+            <div class="glass-card empty-doctor-state">
+              <h4>Searching Nearby Ophthalmology Providers & PHCs...</h4>
+            </div>
+          </div>
+
+          <div class="doctor-map-column">
+            <div class="glass-card map-card">
+              <div id="doctorMapContainer" style="width: 100%; height: 550px; border-radius: 16px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. CONTACT SECTION -->
+    <section id="contact" class="section section-light">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-eyebrow">Get In Touch <span class="gold-eyebrow-line"></span></div>
+          <h2 class="section-title">Contact Clinical Support</h2>
+          <p class="section-subtitle">Reach Team Thiran for research inquiries, clinical integrations, or technical support.</p>
+        </div>
+
+        <div class="glass-card contact-form-card">
+          <form id="contactForm" onsubmit="handleContactSubmit(event)">
+            <div class="form-group">
+              <label>FULL NAME</label>
+              <input type="text" id="contactName" class="glass-control" required placeholder="Enter your name">
+            </div>
+            <div class="form-group">
+              <label>EMAIL ADDRESS</label>
+              <input type="email" id="contactEmail" class="glass-control" required placeholder="name@domain.com">
+            </div>
+            <div class="form-group">
+              <label>MESSAGE</label>
+              <textarea id="contactMessage" class="glass-control" rows="4" required placeholder="Describe your inquiry..."></textarea>
+            </div>
+            <button type="submit" class="btn-primary" style="width:100%;">SEND MESSAGE</button>
+          </form>
+          <div id="contactFeedback" class="contact-feedback" style="display:none;"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 9. FOOTER -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand">RetinaX Clinical Suite</div>
+      <p class="clinical-disclaimer">
+        RetinaX is an AI-powered clinical decision support platform for diabetic retinopathy screening.
+        System predictions should be reviewed by certified ophthalmology medical professionals.
+      </p>
+      <div class="footer-bottom">
+        &copy; 2026 RetinaX &bull; Developed by Team Thiran &bull; All Rights Reserved.
+      </div>
+    </div>
+  </footer>
+
+  <!-- MOBILE CAMERA QR PAIRING MODAL -->
+  <div class="modal-overlay" id="mobileCameraModal">
+    <div class="glass-modal modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <div>
+          <h2>CONNECT YOUR PHONE</h2>
+          <p>Use your phone camera to capture and send a retinal image to RetinaX.</p>
+        </div>
+        <button class="close-btn" onclick="closeMobileCameraModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="qr-code-frame" id="qrFrameContainer">
+          <img id="qrImageTag" src="" alt="Mobile Pairing QR Code" style="display: none; width: 220px; height: 220px; border-radius: 12px; margin: 0 auto;">
+          <canvas id="qrCanvas" style="width: 220px; height: 220px; margin: 0 auto;"></canvas>
+        </div>
+
+        <div class="session-timer-badge">
+          SCAN TO CONNECT &bull; TIMER: <span id="sessionTimerCount" class="mono">05:00</span>
+        </div>
+
+        <div class="session-status-text" id="mobileSessionStatus">
+          WAITING FOR PHONE
+        </div>
+
+        <div id="mobileQrErrorContainer" style="display: none; margin-bottom: 1.25rem; padding: 0.85rem; background: rgba(217, 75, 91, 0.15); border: 1px solid #D94B5B; border-radius: 12px; color: #FFD2D7; font-size: 0.85rem; text-align: center;">
+          <p id="mobileQrErrorMessage">Could not generate connection QR code.</p>
+        </div>
+
+        <div class="modal-actions" style="gap: 0.75rem;">
+          <button class="btn-primary btn-sm" id="btnRegenerateQr" onclick="regenerateMobileSession()" style="display: none;">REGENERATE QR CODE</button>
+          <button class="btn-secondary btn-sm" onclick="closeMobileCameraModal()">CANCEL</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTHENTICATION (LOGIN / SIGNUP) MODAL -->
+  <div class="modal-overlay" id="authModal">
+    <div class="glass-modal modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="authModalTitle">ACCOUNT LOGIN</h2>
+          <p id="authModalSubtitle">Sign in to RetinaX Clinical Suite</p>
+        </div>
+        <button class="close-btn" onclick="closeAuthModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="legal-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
+          <button class="tab-btn active" id="tabAuthLogin" onclick="switchAuthTab('login')">LOGIN</button>
+          <button class="tab-btn" id="tabAuthSignup" onclick="switchAuthTab('signup')">REGISTER ACCOUNT</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="authLoginForm" onsubmit="handleLoginSubmit(event)">
+          <div class="form-group">
+            <label>Username / Email</label>
+            <input type="text" id="loginUsername" class="glass-control" placeholder="dr.smith or technician" required>
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="loginPassword" class="glass-control" placeholder="••••••••" required>
+          </div>
+          <div class="form-group">
+            <label>User Role Mode</label>
+            <select id="loginRole" class="glass-control">
+              <option value="clinician">Ophthalmologist / Clinician (Doctor Mode)</option>
+              <option value="assistant">Screening Assistant / Technician (Assistant Mode)</option>
+            </select>
+          </div>
+          <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+            <button type="button" class="btn-secondary btn-sm" onclick="closeAuthModal()">CANCEL</button>
+            <button type="submit" class="btn-primary btn-sm">SIGN IN</button>
+          </div>
+        </form>
+
+        <!-- Signup Form -->
+        <form id="authSignupForm" onsubmit="handleSignupSubmit(event)" style="display: none;">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="signupName" class="glass-control" placeholder="Dr. Ramesh Kumar" required>
+          </div>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="signupEmail" class="glass-control" placeholder="doctor@hospital.org" required>
+          </div>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="signupUsername" class="glass-control" placeholder="dr_ramesh" required>
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="signupPassword" class="glass-control" placeholder="••••••••" required>
+          </div>
+          <div class="form-group">
+            <label>Role</label>
+            <select id="signupRole" class="glass-control">
+              <option value="clinician">Ophthalmologist / Clinician</option>
+              <option value="assistant">Screening Assistant / Technician</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Medical License / Registration No. (Optional)</label>
+            <input type="text" id="signupLicense" class="glass-control" placeholder="MCI-2026-9812">
+          </div>
+          <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+            <button type="button" class="btn-secondary btn-sm" onclick="closeAuthModal()">CANCEL</button>
+            <button type="submit" class="btn-primary btn-sm">CREATE ACCOUNT</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMERGENCY EYE CARE TRIAGE MODAL -->
+  <div class="modal-overlay" id="emergencyModal">
+    <div class="glass-modal modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <div>
+          <h2 style="color: #F87171;">EMERGENCY EYE CARE CONTACT</h2>
+          <p>Immediate Triage & Urgent Ophthalmology Dispatch</p>
+        </div>
+        <button class="close-btn" onclick="closeEmergencyModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="line-height: 1.6; font-size: 0.9rem;">
+        <div style="padding: 1rem; background: rgba(239, 68, 68, 0.15); border: 1px solid #EF4444; border-radius: 12px; margin-bottom: 1.25rem; color: #FECACA;">
+          <strong>ACUTE OCULAR EMERGENCY WARNING:</strong> If the patient experiences sudden severe visual loss, severe eye pain, chemical exposure, or acute trauma, seek immediate emergency medical evaluation.
+        </div>
+        
+        <div style="margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+          <a href="tel:108" class="btn-primary" style="background: linear-gradient(135deg, #EF4444 0%, #B91C1C 100%); text-align: center; justify-content: center; width: 100%;">
+            CALL EMERGENCY AMBULANCE (108 / 112)
+          </a>
+          <a href="tel:+914222221000" class="btn-secondary" style="text-align: center; justify-content: center; width: 100%;">
+            CALL RETINAX EYE INTAKE HELPLINE (+91 422 222 1000)
+          </a>
+        </div>
+
+        <div style="font-size: 0.82rem; color: rgba(255,255,255,0.7); text-align: center; margin-top: 1rem;">
+          Emergency referrals automatically log geolocation data to nearby tertiary eye hospitals.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPERATIONAL HELP & USER GUIDE MODAL -->
+  <div class="modal-overlay" id="helpModal">
+    <div class="glass-modal modal-card" style="max-width: 640px;">
+      <div class="modal-header">
+        <div>
+          <h2>RETINAX OPERATIONAL USER GUIDE</h2>
+          <p>Clinical Workflow Assistance for Technicians & Clinicians</p>
+        </div>
+        <button class="close-btn" onclick="closeHelpModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="font-size: 0.88rem; line-height: 1.6; color: rgba(255,255,255,0.9); max-height: 420px; overflow-y: auto;">
+        <h4 style="color: #18C7BE; margin-bottom: 0.4rem;">1. Assistant Mode (Technicians)</h4>
+        <p style="margin-bottom: 1rem;">Capture retinal fundus images using a fundus camera, desktop upload, webcam, or mobile camera sync. Enter patient parameters, run the ResNet152 AI classifier, download clinical PDF reports, and route reports directly to nearby hospitals/PHCs.</p>
+
+        <h4 style="color: #18C7BE; margin-bottom: 0.4rem;">2. Doctor Mode (Ophthalmologists)</h4>
+        <p style="margin-bottom: 1rem;">Review incoming patient screening queues, analyze Grad-CAM heatmaps, verify 5-class probability distributions, add diagnostic notes, and sign off on reports.</p>
+
+        <h4 style="color: #18C7BE; margin-bottom: 0.4rem;">3. Hospital & PHC Data Transmission</h4>
+        <p>Use the "Find Doctors" section to locate real nearby Primary Health Centres (PHCs) and government eye care hospitals. Click "Route Report to Hospital" to dispatch timestamped patient screening records.</p>
+      </div>
+      <div class="modal-actions" style="margin-top: 1.25rem; text-align: right;">
+        <button class="btn-secondary btn-sm" onclick="closeHelpModal()">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD MODAL -->
+  <div class="modal-overlay" id="dashboardModal">
+    <div class="glass-modal modal-card" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <h2>SYSTEM DASHBOARD STATISTICS</h2>
+          <p>Real-time analytics from RetinaX persistent database</p>
+        </div>
+        <button class="close-btn" onclick="closeDashboardModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="dashboardStatsContainer">
+          <p style="text-align: center; color: rgba(255,255,255,0.7);">Loading database statistics...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NON-BLOCKING CLINICAL TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/static/assets/js/app.js?v=4.0"></script>
+  <script src="/static/assets/js/script.js?v=4.0"></script>
+</body>
+</html>
