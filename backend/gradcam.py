@@ -32,24 +32,31 @@ def generate_gradcam(model: nn.Module, image_tensor: torch.Tensor, original_imag
     handle_bwd = target_layer.register_full_backward_hook(backward_hook)
     
     try:
-        # Prepare input tensor with gradients enabled
-        input_tensor = image_tensor.unsqueeze(0).to(device).requires_grad_(True)
+        model_dtype = next(model.parameters()).dtype
+        for param in target_layer.parameters():
+            param.requires_grad = True
+
+        if image_tensor.dim() == 3:
+            input_tensor = image_tensor.unsqueeze(0).to(device=device, dtype=model_dtype).detach().requires_grad_(True)
+        else:
+            input_tensor = image_tensor.to(device=device, dtype=model_dtype).detach().requires_grad_(True)
         
-        # Forward pass
-        output = model(input_tensor)
-        
-        if target_class is None:
-            target_class = torch.argmax(output, dim=1).item()
+        # Forward pass with gradients enabled
+        with torch.set_grad_enabled(True):
+            output = model(input_tensor)
             
-        target_score = output[0, target_class]
+            if target_class is None:
+                target_class = torch.argmax(output, dim=1).item()
+                
+            target_score = output[0, target_class]
+            
+            # Backward pass
+            model.zero_grad()
+            target_score.backward(retain_graph=True)
         
-        # Backward pass
-        model.zero_grad()
-        target_score.backward(retain_graph=True)
-        
-        # Get activations and gradients
-        act = activations[0].detach().cpu().numpy()[0]   # [C, H, W] e.g. [2048, 7, 7]
-        grad = gradients[0].detach().cpu().numpy()[0]   # [C, H, W]
+        # Get activations and gradients (convert bfloat16 tensors to float32 for numpy/cv2)
+        act = activations[0].to(dtype=torch.float32).detach().cpu().numpy()[0]   # [C, H, W] e.g. [2048, 7, 7]
+        grad = gradients[0].to(dtype=torch.float32).detach().cpu().numpy()[0]   # [C, H, W]
         
         # Compute channel weights via global average pooling of gradients
         weights = np.mean(grad, axis=(1, 2))            # [C]

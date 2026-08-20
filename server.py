@@ -1,4 +1,10 @@
 import os
+# Force single process execution on Render Free to prevent worker multiplication
+os.environ["WEB_CONCURRENCY"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 import io
 import datetime
 import random
@@ -12,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 
-from backend.model import load_model, preprocess_image, main as run_inference, severity_info
+from backend.model import load_model, preprocess_image, main as run_inference, severity_info, get_rss_mb
 from backend.quality import assess_image_quality
 from backend.gradcam import generate_gradcam
 from backend.pdf_generator import generate_pdf_report
@@ -65,6 +71,7 @@ def startup_event():
     init_db()
     # Load PyTorch Model
     model = load_model()
+    print(f"[DIAGNOSTIC] process RSS after application startup: {get_rss_mb():.2f} MB")
     print("[+] Web Application Ready!")
     print("---------------------------------------------")
     print("    RETINAX AI PLATFORM ACTIVE")

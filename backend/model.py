@@ -2,21 +2,39 @@ import backend.torch_fix
 
 import os
 import io
+import sys
+
+def get_rss_mb():
+    try:
+        import psutil
+        return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+    except Exception:
+        return 0.0
+
+print(f"[DIAGNOSTIC] process RSS before importing torch: {get_rss_mb():.2f} MB")
 import torch
+print(f"[DIAGNOSTIC] process RSS after importing torch: {get_rss_mb():.2f} MB")
+
+# Force single thread for CPU execution to minimize thread overhead
+torch.set_num_threads(1)
+try:
+    torch.set_num_interop_threads(1)
+except Exception:
+    pass
+
 import torchvision
 from torchvision import models
 import torch.nn as nn
 from PIL import Image
+
+print(f"[DIAGNOSTIC] process RSS after importing torchvision: {get_rss_mb():.2f} MB")
 
 
 # ============================================================
 # DEVICE
 # ============================================================
 
-# Render Free does not provide a CUDA GPU.
-# Force CPU and cap PyTorch threads to reduce runtime RAM footprint.
 device = torch.device("cpu")
-torch.set_num_threads(2)
 
 
 # ============================================================
@@ -108,6 +126,11 @@ MODEL_DIR = os.path.join(
 MODEL_PATH = os.path.join(
     MODEL_DIR,
     "classifier.pt"
+)
+
+MODEL_PATH_BF16 = os.path.join(
+    MODEL_DIR,
+    "classifier_bfloat16.pt"
 )
 
 BEST_QWK_MODEL_PATH = os.path.join(
@@ -276,28 +299,36 @@ def build_model(
 # ============================================================
 
 def load_model(
-    model_path: str = MODEL_PATH
+    model_path: str = MODEL_PATH_BF16
 ):
     """
     Load RetinaX model checkpoint for inference.
 
-    Optimized for low-memory CPU deployment (using bfloat16 precision and immediate GC).
+    Optimized for low-memory CPU deployment (directly constructing ResNet152 in bfloat16).
     """
 
-    print("[+] Building RetinaX ResNet152 model...")
+    print(f"[DIAGNOSTIC] process RSS before model construction: {get_rss_mb():.2f} MB")
+    print("[+] Building RetinaX ResNet152 model directly in bfloat16 precision...")
 
-    model = build_model(
-        pretrained=False,
-        stage=2
-    )
+    # Construct model directly with bfloat16 default dtype to cut peak RAM in half
+    previous_dtype = torch.get_default_dtype()
+    try:
+        torch.set_default_dtype(torch.bfloat16)
+        model = build_model(
+            pretrained=False,
+            stage=2
+        )
+    finally:
+        torch.set_default_dtype(previous_dtype)
 
-    abs_model_path = os.path.abspath(
-        model_path
-    )
+    print(f"[DIAGNOSTIC] process RSS after ResNet152 construction: {get_rss_mb():.2f} MB")
 
-    print(
-        f"[+] Model path: {abs_model_path}"
-    )
+    # Fall back to classifier.pt if classifier_bfloat16.pt is absent
+    abs_model_path = os.path.abspath(model_path)
+    if not os.path.exists(abs_model_path) and os.path.exists(os.path.abspath(MODEL_PATH)):
+        abs_model_path = os.path.abspath(MODEL_PATH)
+
+    print(f"[+] Model path: {abs_model_path}")
 
     if not os.path.exists(abs_model_path):
 
@@ -311,13 +342,15 @@ def load_model(
 
     try:
 
-        print("[+] Loading classifier.pt...")
+        print(f"[+] Loading state dictionary from {os.path.basename(abs_model_path)}...")
 
         state_dict = torch.load(
             abs_model_path,
             map_location="cpu",
             weights_only=True
         )
+
+        print(f"[DIAGNOSTIC] process RSS after loading checkpoint: {get_rss_mb():.2f} MB")
 
         if (
             isinstance(state_dict, dict)
@@ -328,29 +361,26 @@ def load_model(
                 "model_state_dict"
             ]
 
-        # Convert to bfloat16 if specified or on low-memory CPU
-        use_bf16 = os.getenv("USE_BFLOAT16", "true").lower() == "true"
-        if use_bf16:
-            print("[+] Converting model weights to bfloat16 precision for low-memory deployment...")
-            bf16_state = {}
-            for k, v in state_dict.items():
-                if v.is_floating_point():
-                    bf16_state[k] = v.to(dtype=torch.bfloat16)
-                else:
-                    bf16_state[k] = v
-            state_dict = bf16_state
-            model.to(dtype=torch.bfloat16)
-
-        print("[+] Loading state dictionary...")
+        # Convert state_dict to bfloat16 if needed
+        bf16_state = {}
+        for k, v in state_dict.items():
+            if v.is_floating_point():
+                bf16_state[k] = v.to(dtype=torch.bfloat16)
+            else:
+                bf16_state[k] = v
+        state_dict = bf16_state
 
         model.load_state_dict(
             state_dict
         )
 
         # Release temporary checkpoint dictionary from RAM immediately
-        del state_dict
+        del state_dict, bf16_state
+        print(f"[DIAGNOSTIC] process RSS after deleting state_dict: {get_rss_mb():.2f} MB")
+
         import gc
         gc.collect()
+        print(f"[DIAGNOSTIC] process RSS after gc.collect(): {get_rss_mb():.2f} MB")
 
         print(
             "[+] RetinaX ResNet152 loaded successfully (RAM reclaimed)."
@@ -416,13 +446,12 @@ def main(
 
     with torch.inference_mode():
 
-        # Match model precision (e.g. bfloat16 or float32)
+        # Match model precision (bfloat16) and device
         model_dtype = next(model.parameters()).dtype
         image_tensor = (
             image_tensor
-            .to(dtype=model_dtype)
+            .to(device=device, dtype=model_dtype)
             .unsqueeze(0)
-            .to(device)
         )
 
         # Prediction
