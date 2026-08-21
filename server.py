@@ -10,7 +10,6 @@ import datetime
 import random
 import json
 import base64
-import torch
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,9 +17,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 
-from backend.model import load_model, preprocess_image, main as run_inference, severity_info, get_rss_mb
+from backend.onnx_model import (
+    load_onnx_model, preprocess_image, run_onnx_inference,
+    generate_onnx_gradcam, severity_info, get_rss_mb
+)
 from backend.quality import assess_image_quality
-from backend.gradcam import generate_gradcam
 from backend.pdf_generator import generate_pdf_report
 from backend.database.db import (
     init_db, log_prediction, log_report, get_report_by_id,
@@ -59,18 +60,18 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 app.mount("/sampleimages", StaticFiles(directory=os.path.join(BASE_DIR, "sampleimages")), name="sampleimages")
 
-# Global ML model instance & DEMO_MODE setting
-model = None
+# Global ONNX model session & DEMO_MODE setting
+onnx_session = None
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 @app.on_event("startup")
 def startup_event():
-    global model
+    global onnx_session
     print("[*] Initializing RetinaX Backend Services...")
     # Initialize DB (MySQL with SQLite fallback)
     init_db()
-    # Load PyTorch Model
-    model = load_model()
+    # Load ONNX Production Model
+    onnx_session = load_onnx_model()
     print(f"[DIAGNOSTIC] process RSS after application startup: {get_rss_mb():.2f} MB")
     print("[+] Web Application Ready!")
     print("---------------------------------------------")
@@ -79,6 +80,22 @@ def startup_event():
     print("Open your browser: http://localhost:8000")
     print("API Docs at:       http://localhost:8000/docs")
     print("---------------------------------------------")
+
+@app.get("/health")
+@app.get("/api/health")
+def api_health():
+    global onnx_session
+    is_ready = onnx_session is not None
+    return {
+        "status": "ok",
+        "model_loaded": is_ready,
+        "model_status": "READY" if is_ready else "UNAVAILABLE",
+        "device": "cpu",
+        "runtime": "onnxruntime",
+        "database": "connected",
+        "demo_mode": DEMO_MODE,
+        "timestamp": datetime.datetime.now().isoformat()
+    }
 
 @app.get("/", response_class=HTMLResponse)
 def read_root():
@@ -194,24 +211,9 @@ async def contact_form_submit(
 
 # ==================== HEALTH & MODEL INFO ENDPOINTS ====================
 
-@app.get("/api/health")
-def api_health():
-    global model
-    device_name = "cuda" if torch.cuda.is_available() else "cpu"
-    is_ready = model is not None
-    return {
-        "status": "ok",
-        "model_loaded": is_ready,
-        "model_status": "READY" if is_ready else "UNAVAILABLE",
-        "device": device_name,
-        "database": "connected",
-        "demo_mode": DEMO_MODE,
-        "timestamp": datetime.datetime.now().isoformat()
-    }
-
 @app.get("/api/model-info")
 def api_model_info():
-    device_name = "cuda" if torch.cuda.is_available() else "cpu"
+    global onnx_session
     metrics_path = os.path.join(MODEL_DIR, "evaluation_metrics.json")
     eval_metrics = None
     if os.path.exists(metrics_path):
@@ -223,13 +225,13 @@ def api_model_info():
 
     return {
         "architecture": "ResNet152",
-        "framework": "PyTorch",
+        "framework": "ONNX Runtime CPU",
         "dataset": "APTOS 2019 Blindness Detection",
         "num_classes": 5,
         "classes": ["No DR", "Mild NPDR", "Moderate NPDR", "Severe NPDR", "Proliferative DR"],
         "task": "Diabetic Retinopathy Classification",
-        "inference_device": device_name,
-        "status": "Loaded" if model is not None else "Unavailable",
+        "inference_device": "cpu",
+        "status": "Loaded" if onnx_session is not None else "Unavailable",
         "evaluation_metrics": eval_metrics
     }
 
@@ -267,7 +269,7 @@ class PredictResponse(BaseModel):
 @app.post("/api/predict", response_model=PredictResponse)
 @app.post("/analyze", response_model=PredictResponse)
 async def predict_retinal_image(file: UploadFile = File(...), patient_id: Optional[str] = Form("RX-ANON"), patient_name: Optional[str] = Form("Anonymous")):
-    global model
+    global onnx_session
     if not file:
         raise HTTPException(status_code=400, detail="No image file uploaded.")
     
@@ -276,20 +278,20 @@ async def predict_retinal_image(file: UploadFile = File(...), patient_id: Option
         raise HTTPException(status_code=400, detail="Empty file uploaded.")
         
     try:
-        if model is None:
+        if onnx_session is None:
             if DEMO_MODE:
                 print("[!] DEMO_MODE active: Returning demo prediction")
             else:
-                model = load_model()
-                if model is None:
-                    raise HTTPException(status_code=503, detail="PyTorch ResNet152 model is unavailable.")
+                onnx_session = load_onnx_model()
+                if onnx_session is None:
+                    raise HTTPException(status_code=503, detail="ONNX ResNet152 model is unavailable.")
 
         # 1. Technical Image Quality Assessment
         quality_res = assess_image_quality(contents)
         
-        # 2. PyTorch ResNet152 Model Inference
-        tensor = preprocess_image(contents)
-        predicted_idx, confidence_pct, raw_probs = run_inference(model, tensor)
+        # 2. ONNX ResNet152 Model Inference
+        input_tensor = preprocess_image(contents)
+        predicted_idx, confidence_pct, raw_probs, layer4_act = run_onnx_inference(onnx_session, input_tensor)
         
         info = severity_info.get(predicted_idx, severity_info[0])
         class_names = ["No DR", "Mild NPDR", "Moderate NPDR", "Severe NPDR", "Proliferative DR"]
@@ -299,8 +301,8 @@ async def predict_retinal_image(file: UploadFile = File(...), patient_id: Option
         }
         all_probs_pct = [round(p * 100, 2) for p in raw_probs]
         
-        # 3. Real PyTorch Grad-CAM Generation
-        gradcam_res = generate_gradcam(model, tensor, contents, target_class=predicted_idx)
+        # 3. ONNX Analytical Grad-CAM Generation
+        gradcam_res = generate_onnx_gradcam(layer4_act, contents, target_class=predicted_idx)
 
         # 4. Log prediction to Persistent Database
         log_prediction(
@@ -332,14 +334,15 @@ async def predict_retinal_image(file: UploadFile = File(...), patient_id: Option
 
 @app.post("/api/gradcam")
 async def api_gradcam(file: UploadFile = File(...), target_class: Optional[int] = Form(None)):
-    global model
+    global onnx_session
     if not file:
         raise HTTPException(status_code=400, detail="No image file uploaded.")
     contents = await file.read()
-    tensor = preprocess_image(contents)
-    if model is None:
-        model = load_model()
-    return generate_gradcam(model, tensor, contents, target_class=target_class)
+    input_tensor = preprocess_image(contents)
+    if onnx_session is None:
+        onnx_session = load_onnx_model()
+    _, _, _, layer4_act = run_onnx_inference(onnx_session, input_tensor)
+    return generate_onnx_gradcam(layer4_act, contents, target_class=target_class)
 
 # ==================== PATIENT HISTORY & TIMELINE ====================
 

@@ -32,8 +32,10 @@ ENV/
 *.sqlite3
 *.pt
 *.pth
+*.onnx
 models/*.pt
 models/*.pth
+models/*.onnx
 reports/*.pdf
 
 # OS / IDE
